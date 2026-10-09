@@ -145,6 +145,29 @@ input:focus, select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 18px; border-radius: 14px; width: max-content; font-weight: 700; font-size: .85rem; z-index: 200; display: none; max-width: 92vw; text-align: center; }
 #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
 
+/* GESTÃO 360 */
+.seg { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.seg button { border: 1px solid var(--line); background: #fff; padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; cursor: pointer; color: var(--ink2); }
+.seg button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+.seg button .n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: .72rem; }
+.todo { display: flex; flex-direction: column; gap: 8px; }
+.todo .it { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: .92rem; cursor: pointer; }
+.todo .it .ic { font-size: 1.2rem; line-height: 1.2; }
+.todo .it.red { border-color: #fecaca; background: var(--red-soft); } .todo .it.amber { border-color: #fde68a; background: var(--amber-soft); }
+.hb { display: grid; grid-template-columns: minmax(120px, 34%) 1fr 54px; align-items: center; gap: 10px; padding: 5px 0; font-size: .88rem; }
+.hb .tr { height: 10px; background: #eef0f3; border-radius: 999px; overflow: hidden; } .hb .tr div { height: 100%; border-radius: 999px; background: var(--accent); }
+.hb .q { text-align: right; font-weight: 800; }
+.act { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 330px; }
+.act select, .act input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: .82rem; background: #fff; }
+.act input { width: 130px; }
+.act .sv { padding: 6px 10px; border-radius: 8px; border: none; background: var(--brand); color: #fff; font-weight: 800; cursor: pointer; font-size: .8rem; }
+.act .sv:disabled { opacity: .5; cursor: wait; }
+.lst td { vertical-align: middle; }
+.lst .nm { font-weight: 700; } .lst .sm { font-size: .78rem; color: var(--muted); }
+.filt { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.filt button { border: 1px solid var(--line); background: var(--soft); padding: 5px 10px; border-radius: 8px; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.filt button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 @media (max-width: 720px) {
   .header { padding: 12px 14px; }
   .brand img { height: 36px; } .brand .unit { padding-left: 12px; } .brand .unit h1 { font-size: 1.05rem; }
@@ -173,6 +196,7 @@ input:focus, select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
   <button data-tab="folha">💰 Resultado Folha</button>
   <button data-tab="produtos">🛒 Produtos</button>
   <button data-tab="lider">👑 Líder <span class="lock">🔒</span></button>
+  <button data-tab="gestao">🧭 Gestão 360 <span class="lock">🔒</span></button>
   <button data-tab="preencher">✏️ Preencher <span class="lock">🔒</span></button>
 </nav>
 
@@ -192,6 +216,7 @@ input:focus, select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
   <section class="tab" id="tab-folha"><div id="folhaContent"></div></section>
   <section class="tab" id="tab-produtos"><div id="produtosContent"></div></section>
   <section class="tab" id="tab-lider"><div id="liderContent"></div></section>
+  <section class="tab" id="tab-gestao"><div id="gestaoContent"></div></section>
   <section class="tab" id="tab-preencher"><div id="preencherContent"></div></section>
 </main>
 
@@ -288,7 +313,7 @@ async function apiPost(body) {
 }
 
 // ==================== NAVEGAÇÃO E ACESSO ====================
-const RESTRITAS = ['lider', 'preencher'];
+const RESTRITAS = ['lider', 'preencher', 'gestao'];
 document.querySelectorAll('#nav button').forEach(b => b.addEventListener('click', () => {
   const tab = b.dataset.tab;
   if (RESTRITAS.includes(tab) && cfg && cfg.consulta) { toast('🔒 ' + rotulo(currentMonth) + ' está fechado (só consulta até ' + cfg.consultaAte + ').', '#b45309'); return; }
@@ -299,6 +324,7 @@ function switchTab(tab) {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
   if (tab === 'lider') renderLider();
+  if (tab === 'gestao') renderGestao();
   if (tab === 'preencher') renderPreencher();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -321,11 +347,219 @@ function setUnlocked(on) {
   $('btnSair').style.display = on ? 'inline-block' : 'none';
   document.querySelectorAll('#nav .lock').forEach(l => l.textContent = on ? '' : '🔒');
   if (!on) {
-    senhaLider = null; $('liderContent').innerHTML = ''; $('preencherContent').innerHTML = '';
+    senhaLider = null; G = null; $('gestaoContent').innerHTML = ''; $('liderContent').innerHTML = ''; $('preencherContent').innerHTML = '';
     const a = document.querySelector('#nav button.active'); if (a && RESTRITAS.includes(a.dataset.tab)) switchTab('meta');
   }
 }
 function logout() { setUnlocked(false); toast('Área da líder fechada'); }
+
+// ==================== GESTÃO 360 (dados do Evo) ====================
+let G = null, gTab = 'visao', gFiltro = { renov: 'pendente', inad: 'todos', canc: 'todos' };
+const SIT = { pendente: ['A vencer', 'amber'], nao_renovado: ['Venceu sem renovar', 'red'] };
+
+async function renderGestao(forcar) {
+  const el = $('gestaoContent'); if (!isUnlocked) return;
+  if (G && !forcar && G.mes === currentMonth) { desenharGestao(); return; }
+  el.innerHTML = '<div class="spinner"></div><div class="empty">Lendo os dados do Evo…</div>';
+  let r; try { r = await apiPost({ action: 'gestao', mes: currentMonth, senha: senhaLider }); } catch (e) { el.innerHTML = '<div class="alert red">Erro de conexão.</div>'; return; }
+  if (!r || !r.ok) { el.innerHTML = '<div class="alert red">' + esc((r && r.msg) || 'Não foi possível carregar.') + '</div>'; if (r && r.erro === 'senha') setUnlocked(false); return; }
+  G = r; desenharGestao();
+}
+
+async function sincronizarEvoAgora() {
+  const b = $('btnSync'); if (b) { b.disabled = true; b.textContent = 'Atualizando…'; }
+  try {
+    const r = await apiPost({ action: 'sincronizar', mes: currentMonth, senha: senhaLider });
+    toast(r && r.ok ? (r.emAndamento ? '⏳ ' + r.msg : '✅ Dados do Evo atualizados') : '⚠️ ' + ((r && r.msg) || 'Falha ao atualizar'), r && r.ok ? '#15803d' : '#b45309');
+  } catch (e) { toast('⚠️ Sem conexão', '#b45309'); }
+  renderGestao(true);
+}
+
+function desenharGestao() {
+  const r = G, el = $('gestaoContent');
+  if (r.ultimaSync && r.ultimaSync.primeira) { const a = r.ultimaSync.andamento; el.innerHTML = `<div class="card"><h2>🧭 Gestão 360</h2><div class="alert blue">⏳ Primeira carga dos dados do Evo em andamento: etapa <b>${a.feitas} de ${a.total}</b>. Ela continua sozinha, a cada minuto. Volte em alguns minutos.</div><button class="btn btn-light" onclick="renderGestao(true)">Ver progresso</button></div>`; return; }
+  if (!r.ultimaSync) { el.innerHTML = `<div class="card"><h2>🧭 Gestão 360</h2><div class="alert amber">Os dados do Evo ainda não foram carregados. Rode <b>instalarSincronizacao</b> no Apps Script (uma vez) ou clique abaixo.</div><button class="btn btn-dark" id="btnSync" onclick="sincronizarEvoAgora()">🔄 Buscar dados do Evo agora</button></div>`; return; }
+  const R = r.renovacao, C = r.cancelamento, I = r.inadimplencia;
+  const nUrg = I.cancelam7dias + R.lista.filter(x => x.situacao === 'pendente' && x.diasParaVencer <= 7 && !x.acao).length;
+  const segs = [['visao', '🧭 Visão do mês', nUrg], ['renov', '🔄 Renovação', R.pendentes + R.perdidos], ['inad', '💳 Inadimplência', I.alunos], ['canc', '🚪 Cancelamentos', C.total]];
+  el.innerHTML = `
+    <div class="bar" style="margin-bottom:12px">
+      <span class="status">📡 Evo atualizado em <b>${esc(r.ultimaSync.em)}</b>${r.ultimaSync.andamento ? ` · <span class="chip blue">⏳ atualizando: etapa ${r.ultimaSync.andamento.feitas} de ${r.ultimaSync.andamento.total}</span>` : ''}${r.ultimaSync.erro ? ' · <span class="bad">erro: ' + esc(r.ultimaSync.erro) + '</span>' : ''}</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-light" id="btnSync" style="padding:7px 14px" onclick="sincronizarEvoAgora()">🔄 Atualizar agora</button>
+    </div>
+    <div class="seg">${segs.map(s => `<button class="${gTab === s[0] ? 'on' : ''}" onclick="gTab='${s[0]}';desenharGestao()">${s[1]}${s[2] ? `<span class="n">${s[2]}</span>` : ''}</button>`).join('')}</div>
+    <div id="gBody"></div>`;
+  $('gBody').innerHTML = gTab === 'visao' ? gVisao() : gTab === 'renov' ? gRenov() : gTab === 'inad' ? gInad() : gCanc();
+}
+
+const corTaxa = t => t >= 85 ? 'ok' : t >= 70 ? 'warn' : 'bad';
+const hbars = (itens, lbl, max) => { const m = max || Math.max(1, ...itens.map(i => i.qtd)); return itens.map(i => `<div class="hb"><span>${esc(i[lbl])}</span><div class="tr"><div style="width:${i.qtd / m * 100}%"></div></div><span class="q">${i.qtd}</span></div>`).join('') || '<div class="empty">Nada no período.</div>'; };
+const acomp = a => a.total ? `<div class="sub" style="margin:4px 0 0">Equipe: <b>${a.total - a.semContato}</b> de ${a.total} já acionados (${pct((a.total - a.semContato) / a.total * 100)}%) · ${a.efetivos + a.resolvidos} com contato efetivo · ${a.resolvidos} resolvidos · ${a.negados} negados · <span class="${a.semContato ? 'bad' : 'ok'}"><b>${a.semContato}</b> sem nenhum contato</span></div>` : '';
+
+function gVisao() {
+  const r = G, R = r.renovacao, C = r.cancelamento, I = r.inadimplencia, P = r.projecao;
+  const cancPct = P.ativosInicio ? C.total / P.ativosInicio * 100 : null;
+  const novosProj = P.mesCorrente && P.diasPassados ? Math.round(P.novosLancados / P.diasPassados * P.diasMes) : P.novosLancados;
+  const saldo = novosProj - P.total;
+  const todo = [];
+  if (I.cancelam7dias) todo.push(['red', '⏰', `<b>${I.cancelam7dias} aluno(s) inadimplente(s) serão cancelados em até 7 dias.</b> Ligar hoje — depois dos ${r.diasCancela} dias o recorrente cai sozinho.`, 'inad']);
+  const v7 = R.lista.filter(x => x.situacao === 'pendente' && x.diasParaVencer <= 7);
+  const v7s = v7.filter(x => !x.acao).length;
+  if (v7.length) todo.push([v7s ? 'red' : 'amber', '🔄', `<b>${v7.length} plano(s) vencem nos próximos 7 dias</b>${v7s ? ` — ${v7s} ainda sem nenhum contato` : ''}.`, 'renov']);
+  const p45 = R.lista.filter(x => x.situacao === 'pendente' && !x.acao).length;
+  if (p45) todo.push(['amber', '📞', `<b>${p45} renovação(ões) do mês ainda sem contato.</b> O playbook pede contato a partir de 45 dias antes.`, 'renov']);
+  if (R.perdidos) todo.push(['amber', '↩️', `<b>${R.perdidos} aluno(s) venceram e não renovaram.</b> Ainda dá para resgatar com a condição da Gerência.`, 'renov']);
+  if (C.semMotivo) todo.push(['amber', '❓', `<b>${C.semMotivo} cancelamento(s) sem motivo registrado no Evo.</b> Sem motivo não há diagnóstico.`, 'canc']);
+  const cSem = C.lista.filter(x => !x.acao).length;
+  if (cSem) todo.push(['amber', '🛟', `<b>${cSem} cancelamento(s) sem tentativa de reversão registrada.</b>`, 'canc']);
+  if (!todo.length) todo.push(['', '✅', 'Nenhuma pendência crítica agora.', 'visao']);
+  return `
+    <div class="card" style="border-top:4px solid var(--brand)">
+      <h2>🧭 Para onde vai a base em ${esc(rotulo(r.mes))}</h2>
+      <div class="sub">Perdas previstas no mês com base no que já aconteceu e na média dos últimos meses${r.taxaRenovHist != null ? ` (renovação média de ${pct(r.taxaRenovHist)}%)` : ''}.</div>
+      <div class="flow">
+        <div class="step"><div class="l">Não renovação prevista</div><div class="n bad">−${P.perdaRenovacao}</div></div>
+        <div class="step"><div class="l">Cancelamentos previstos</div><div class="n bad">−${P.perdaCancelamento}</div></div>
+        <div class="step"><div class="l">Inadimplência que cancela no mês</div><div class="n bad">−${P.perdaInadimplencia}</div></div>
+        <div class="step" style="border-color:var(--red);background:var(--red-soft)"><div class="l">Perda total prevista</div><div class="n bad">−${P.total}</div></div>
+        <div class="step"><div class="l">${P.mesCorrente ? 'Novos no ritmo atual' : 'Novos no mês'}</div><div class="n ok">+${novosProj}</div></div>
+      </div>
+      <div class="tip" style="margin:14px 0 0"><strong>${saldo >= 0 ? '✅ Base crescendo' : '⚠️ Base encolhendo'}: saldo previsto de ${saldo >= 0 ? '+' : ''}${saldo} aluno(s).</strong>Para a base não encolher, a unidade precisa de pelo menos <b>${P.total}</b> matrículas novas no mês${P.mesCorrente ? ` — já foram ${P.novosLancados} (do painel).` : '.'} Cada renovação salva é uma matrícula a menos para buscar.</div>
+    </div>
+    <div class="grid">
+      ${kpi('Renovação do mês', pct(R.taxa) + '%', `${R.renovados} de ${R.total} · ${R.pendentes} a vencer · ${R.perdidos} perdidos`, corTaxa(R.taxa))}
+      ${kpi('Migraram para o anual', R.migrouAnual, `de ${R.renovados} renovações · ${R.antecipadas} antecipadas`, 'info')}
+      ${kpi('Cancelamentos', C.total, (cancPct != null ? pct(cancPct) + '% dos ativos · ' : '') + `${C.trocasDePlano} trocas de plano à parte · ano passado: ${r.cancAnoPassado}`, cancPct == null ? '' : cancPct <= 3 ? 'ok' : cancPct <= 4 ? 'warn' : 'bad')}
+      ${kpi('Inadimplentes agora', I.alunos, `${brl(I.valorAberto)} em aberto · ${I.criticos} críticos (31+ dias)`, I.criticos ? 'bad' : 'warn')}
+      ${kpi('Recuperado no mês', brl(I.recuperadoMes), `${I.recuperadosQtd} cobrança(s) recuperada(s)`, 'ok')}
+    </div>
+    <div class="card">
+      <h2>✅ O que a líder precisa fazer agora</h2>
+      <div class="todo">${todo.map(t => `<div class="it ${t[0]}" onclick="gTab='${t[3]}';desenharGestao()"><span class="ic">${t[1]}</span><span>${t[2]}</span></div>`).join('')}</div>
+    </div>
+    <div class="card">
+      <h2>📈 Últimos 6 meses</h2>
+      <div class="sub">Base para a projeção. Meses com menos de 5 vencimentos não entram na média.</div>
+      <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Vencimentos</th><th>Renovados</th><th>Taxa</th><th>Migraram p/ anual</th><th>Cancelamentos</th></tr></thead><tbody>
+      ${r.historico.map(h => `<tr><td>${esc(rotulo(h.mes))}</td><td>${h.venc}</td><td>${h.renov}</td><td class="${h.venc ? corTaxa(h.taxa) : ''}"><b>${h.venc ? pct(h.taxa) + '%' : '—'}</b></td><td>${h.migrouAnual}</td><td>${h.canc}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`;
+}
+
+function acaoCell(it) {
+  const a = it.acao || {}, id = it.chave.replace(':', '_');
+  const nomes = (cfg && cfg.consultoras || []).map(c => c.nome);
+  return `<div class="act" id="act_${id}">
+    <select data-f="status">${G.status.map(s => `<option ${s === (a.status || 'A contatar') ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+    <select data-f="motivo"><option value="">motivo…</option>${G.motivos.map(m => `<option ${m === a.motivo ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+    <select data-f="responsavel"><option value="">quem…</option>${nomes.map(n => `<option ${n === a.responsavel ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <input data-f="obs" placeholder="observação" value="${esc(a.obs || '')}">
+    <button class="sv" onclick="salvarAcao('${it.chave}')">Salvar</button>
+  </div>${a.em ? `<div class="sm">${a.tentativas} registro(s) · último ${esc(a.em)}</div>` : ''}`;
+}
+
+async function salvarAcao(chave) {
+  const box = $('act_' + chave.replace(':', '_')); if (!box) return;
+  const d = { chave }; box.querySelectorAll('[data-f]').forEach(x => d[x.dataset.f] = x.value);
+  const lista = [...G.renovacao.lista, ...G.inadimplencia.lista, ...G.cancelamento.lista];
+  const it = lista.find(x => x.chave === chave); if (it) { d.idMember = it.idMember; d.nome = it.nome; }
+  const b = box.querySelector('.sv'); b.disabled = true; b.textContent = '…';
+  try {
+    const r = await apiPost({ action: 'acao', mes: currentMonth, senha: senhaLider, dados: d });
+    if (r && r.ok) {
+      toast('✅ Registrado', '#15803d');
+      if (it) { const t = it.acao ? it.acao.tentativas : 0; it.acao = { status: d.status, motivo: d.motivo, obs: d.obs, responsavel: d.responsavel, em: 'agora', tentativas: t + 1 }; }
+      ['renovacao', 'inadimplencia', 'cancelamento'].forEach(k => G[k].acompanhamento = resumoLocal(G[k].lista));
+      desenharGestao();
+    } else { toast('⚠️ ' + ((r && r.msg) || 'Não salvou'), '#b45309'); b.disabled = false; b.textContent = 'Salvar'; }
+  } catch (e) { toast('⚠️ Sem conexão', '#b45309'); b.disabled = false; b.textContent = 'Salvar'; }
+}
+function resumoLocal(lista) {
+  const r = { total: lista.length, semContato: 0, emTentativa: 0, efetivos: 0, resolvidos: 0, negados: 0 };
+  lista.forEach(x => { const s = x.acao ? x.acao.status : 'A contatar'; if (s === 'A contatar') r.semContato++; else if (/^Tentativa/.test(s)) r.emTentativa++; else if (s === 'Resolvido') r.resolvidos++; else if (s === 'Negado') r.negados++; else r.efetivos++; });
+  return r;
+}
+const filtroBtns = (k, ops) => `<div class="filt">${ops.map(o => `<button class="${gFiltro[k] === o[0] ? 'on' : ''}" onclick="gFiltro.${k}='${o[0]}';desenharGestao()">${o[1]}</button>`).join('')}</div>`;
+const semContato = x => !x.acao || x.acao.status === 'A contatar';
+
+function gRenov() {
+  const R = G.renovacao;
+  let lista = R.lista;
+  if (gFiltro.renov === 'pendente') lista = lista.filter(x => x.situacao === 'pendente');
+  if (gFiltro.renov === 'nao_renovado') lista = lista.filter(x => x.situacao === 'nao_renovado');
+  if (gFiltro.renov === 'sem') lista = lista.filter(semContato);
+  return `
+    <div class="grid">
+      ${kpi('Vencimentos do mês', R.total, 'planos com fim no mês (sem recorrência automática)')}
+      ${kpi('Renovados', R.renovados, pct(R.taxa) + '% · meta 70% / super 85%', corTaxa(R.taxa))}
+      ${kpi('A vencer', R.pendentes, 'ainda dá para renovar', 'warn')}
+      ${kpi('Venceram sem renovar', R.perdidos, 'resgate / reativação', R.perdidos ? 'bad' : 'ok')}
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>📦 Renovação por tipo de plano</h2><div class="sub">Onde a renovação está mais fraca.</div>
+        <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Vencem</th><th>Renovados</th><th>A vencer</th><th>Perdidos</th><th>Taxa</th></tr></thead><tbody>
+        ${R.porTipo.map(t => `<tr><td><b>${esc(t.tipo)}</b></td><td>${t.total}</td><td>${t.renovados}</td><td>${t.pendentes}</td><td>${t.perdidos}</td><td class="${corTaxa(t.taxa)}"><b>${pct(t.taxa)}%</b></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Sem vencimentos no mês.</td></tr>'}
+        </tbody></table></div></div>
+      <div class="card"><h2>⬆️ Plano anterior → plano novo</h2><div class="sub">Quem renovou, renovou para quê. O objetivo é migrar para o anual.</div>
+        ${R.migracao.length ? R.migracao.map(m => `<div class="row"><span class="lbl">${esc(m.de_para)}</span><span class="val ${/→ Anual$/.test(m.de_para) && !/^Anual/.test(m.de_para) ? 'ok' : ''}">${m.qtd}</span></div>`).join('') : '<div class="empty">Nenhuma renovação ainda.</div>'}
+      </div>
+    </div>
+    <div class="card"><h2>📋 Lista de trabalho — renovação</h2>${acomp(R.acompanhamento)}
+      ${filtroBtns('renov', [['pendente', 'A vencer'], ['nao_renovado', 'Venceram sem renovar'], ['sem', 'Sem contato'], ['todos', 'Todos']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Vence</th><th>Situação</th><th>Contato da equipe</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.fim))}<div class="sm">${x.diasParaVencer >= 0 ? 'em ' + x.diasParaVencer + ' dia(s)' : 'há ' + (-x.diasParaVencer) + ' dia(s)'}</div></td><td><span class="chip ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada nesta lista. 🎉</td></tr>'}
+      </tbody></table></div></div>`;
+}
+
+function gInad() {
+  const I = G.inadimplencia;
+  let lista = I.lista;
+  if (gFiltro.inad === 'urg') lista = lista.filter(x => x.diasParaCancelar <= 10);
+  if (gFiltro.inad === 'sem') lista = lista.filter(semContato);
+  const maxQ = Math.max(1, ...I.faixas.map(f => f.qtd));
+  return `
+    <div class="grid">
+      ${kpi('Alunos inadimplentes', I.alunos, brl(I.valorAberto) + ' em aberto', I.alunos ? 'warn' : 'ok')}
+      ${kpi('Cancelam em até 7 dias', I.cancelam7dias, 'regra dos ' + G.diasCancela + ' dias', I.cancelam7dias ? 'bad' : 'ok')}
+      ${kpi('Críticos (31+ dias)', I.criticos, '', I.criticos ? 'bad' : 'ok')}
+      ${kpi('Recuperado no mês', brl(I.recuperadoMes), I.recuperadosQtd + ' cobrança(s) · conta na meta financeira', 'ok')}
+    </div>
+    <div class="card"><h2>⏳ Inadimplência por tempo de atraso</h2><div class="sub">Quanto mais perto dos ${G.diasCancela} dias, mais urgente.</div>
+      ${I.faixas.map(f => `<div class="hb"><span>${esc(f.faixa)}</span><div class="tr"><div style="width:${f.qtd / maxQ * 100}%;background:${/crít|40/.test(f.faixa) ? 'var(--red)' : 'var(--amber)'}"></div></div><span class="q">${f.qtd}</span></div>`).join('')}
+    </div>
+    <div class="card"><h2>📋 Lista de trabalho — recuperação</h2>${acomp(I.acompanhamento)}
+      ${filtroBtns('inad', [['todos', 'Todos'], ['urg', 'Cancelam em até 10 dias'], ['sem', 'Sem contato']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Em aberto</th><th>Atraso</th><th>Cobrança</th><th>Contato da equipe</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td><b>${brl(x.valor)}</b><div class="sm">${x.parcelas} parcela(s)</div></td><td><span class="chip ${x.diasParaCancelar <= 7 ? 'red' : x.diasParaCancelar <= 15 ? 'amber' : 'gray'}">${x.diasAtraso} dias</span><div class="sm">${x.diasParaCancelar > 0 ? 'cancela em ' + x.diasParaCancelar + ' dia(s)' : 'já passou dos ' + G.diasCancela + ' dias'}</div></td><td><div class="sm">${x.tentativas} tentativa(s) automáticas${x.recusa ? '<br>recusa: ' + esc(x.recusa) : ''}${x.forma ? '<br>' + esc(x.forma) : ''}</div></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum inadimplente. 🎉</td></tr>'}
+      </tbody></table></div></div>`;
+}
+
+function gCanc() {
+  const C = G.cancelamento, P = G.projecao;
+  let lista = C.lista;
+  if (gFiltro.canc === 'sem') lista = lista.filter(semContato);
+  if (gFiltro.canc === 'semmot') lista = lista.filter(x => x.motivo === 'Sem motivo registrado');
+  const cancPct = P.ativosInicio ? C.total / P.ativosInicio * 100 : null;
+  return `
+    <div class="grid">
+      ${kpi('Cancelamentos no mês', C.total, cancPct != null ? pct(cancPct) + '% dos ativos do dia 01 · ideal ≤ 3%' : 'lance os ativos do dia 01 no painel para ver o %', cancPct == null ? '' : cancPct <= 3 ? 'ok' : cancPct <= 4 ? 'warn' : 'bad')}
+      ${kpi('Sem motivo registrado', C.semMotivo, C.total ? pct(C.semMotivo / C.total * 100) + '% dos cancelamentos' : '', C.semMotivo ? 'bad' : 'ok')}
+      ${kpi('Trocas de plano', C.trocasDePlano, 'não contam como perda', 'info')}
+      ${kpi('Mesmo mês, ano passado', G.cancAnoPassado, 'cancelamentos')}
+    </div>
+    <div class="grid-2">
+      <div class="card"><h2>❓ Por que estão saindo</h2><div class="sub">Motivo registrado no Evo.</div>${hbars(C.motivos, 'motivo')}</div>
+      <div class="card"><h2>⏱️ Quanto tempo ficaram</h2><div class="sub">Saída cedo = problema de pós-venda e adaptação.</div>${hbars(C.permanencia, 'faixa')}
+        <div class="section-title">Por tipo de plano</div>${hbars(C.porTipo, 'tipo')}</div>
+    </div>
+    <div class="card"><h2>📋 Lista de trabalho — reversão</h2>${acomp(C.acompanhamento)}
+      ${filtroBtns('canc', [['todos', 'Todos'], ['sem', 'Sem tentativa de reversão'], ['semmot', 'Sem motivo no Evo']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Cancelou</th><th>Motivo (Evo)</th><th>Tentativa de reversão</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.data))}<div class="sm">após ${String(x.meses).replace('.', ',')} mês(es)</div></td><td>${x.motivo === 'Sem motivo registrado' ? '<span class="chip red">sem motivo</span>' : esc(x.motivo)}</td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum cancelamento no mês. 🎉</td></tr>'}
+      </tbody></table></div></div>`;
+}
+const dataBR = s => { const p = String(s || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : ''; };
 
 // ==================== CARREGAMENTO ====================
 async function init() {
