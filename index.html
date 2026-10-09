@@ -354,8 +354,8 @@ function setUnlocked(on) {
 function logout() { setUnlocked(false); toast('Área da líder fechada'); }
 
 // ==================== GESTÃO 360 (dados do Evo) ====================
-let G = null, gTab = 'visao', gFiltro = { renov: 'pendente', inad: 'todos', canc: 'todos' };
-const SIT = { pendente: ['A vencer', 'amber'], nao_renovado: ['Venceu sem renovar', 'red'] };
+let G = null, gTab = 'visao', gFiltro = { renov: 'agora', inad: 'todos', canc: 'todos' };
+const SIT = { no_prazo: ['Venceu — ainda é renovação', 'red'], pendente: ['A vencer', 'amber'], nao_renovado: ['Passou dos 30 dias', 'gray'] };
 
 async function renderGestao(forcar) {
   const el = $('gestaoContent'); if (!isUnlocked) return;
@@ -382,7 +382,7 @@ function desenharGestao() {
   const R = r.renovacao, C = r.cancelamento, I = r.inadimplencia;
   const nUrg = I.cancelam7dias + R.lista.filter(x => x.situacao === 'pendente' && x.diasParaVencer <= 7 && !x.acao).length;
   const A = r.agenda || {};
-  const segs = [['visao', '🧭 Visão do mês', nUrg], ['agenda', '📅 Agenda', (A.semRemarcar || []).length], ['renov', '🔄 Renovação', R.pendentes + R.perdidos], ['mensal', '⬆️ Mensalistas', (r.mensalistas || {}).tresMais || 0], ['inad', '💳 Inadimplência', I.alunos], ['canc', '🚪 Cancelamentos', C.total], ['equipe', '👥 Equipe', 0]];
+  const segs = [['visao', '🧭 Visão do mês', nUrg], ['agenda', '📅 Agenda', (A.semRemarcar || []).length], ['renov', '🔄 Renovação', R.noPrazo + R.pendentes], ['mensal', '⬆️ Mensalistas', (r.mensalistas || {}).tresMais || 0], ['inad', '💳 Inadimplência', I.alunos], ['canc', '🚪 Cancelamentos', C.total], ['equipe', '👥 Equipe', 0]];
   el.innerHTML = `
     <div class="bar" style="margin-bottom:12px">
       <span class="status">📡 Evo atualizado em <b>${esc(r.ultimaSync.em)}</b>${r.ultimaSync.andamento ? ` · <span class="chip blue">⏳ atualizando: etapa ${r.ultimaSync.andamento.feitas} de ${r.ultimaSync.andamento.total}</span>` : ''}${r.ultimaSync.erro ? ' · <span class="bad">erro: ' + esc(r.ultimaSync.erro) + '</span>' : ''}</span>
@@ -408,9 +408,9 @@ function gVisao() {
   const v7 = R.lista.filter(x => x.situacao === 'pendente' && x.diasParaVencer <= 7);
   const v7s = v7.filter(x => !x.acao).length;
   if (v7.length) todo.push([v7s ? 'red' : 'amber', '🔄', `<b>${v7.length} plano(s) vencem nos próximos 7 dias</b>${v7s ? ` — ${v7s} ainda sem nenhum contato` : ''}.`, 'renov']);
+  if (R.noPrazo) todo.unshift(['red', '⏳', `<b>${R.noPrazo} aluno(s) já venceram e ainda contam como renovação</b> (até 30 dias). Depois disso viram rematrícula e saem da meta.`, 'renov']);
   const p45 = R.lista.filter(x => x.situacao === 'pendente' && !x.acao).length;
-  if (p45) todo.push(['amber', '📞', `<b>${p45} renovação(ões) do mês ainda sem contato.</b> O playbook pede contato a partir de 45 dias antes.`, 'renov']);
-  if (R.perdidos) todo.push(['amber', '↩️', `<b>${R.perdidos} aluno(s) venceram e não renovaram.</b> Ainda dá para resgatar com a condição da Gerência.`, 'renov']);
+  if (p45) todo.push(['amber', '📞', `<b>${p45} renovação(ões) do mês ainda sem resposta da líder.</b>`, 'renov']);
   if (C.semMotivo) todo.push(['amber', '❓', `<b>${C.semMotivo} cancelamento(s) sem motivo registrado no Evo.</b> Sem motivo não há diagnóstico.`, 'canc']);
   const cSem = C.lista.filter(x => !x.acao).length;
   if (cSem) todo.push(['amber', '🛟', `<b>${cSem} cancelamento(s) sem tentativa de reversão registrada.</b>`, 'canc']);
@@ -436,7 +436,7 @@ function gVisao() {
       <div class="tip" style="margin:14px 0 0"><strong>${saldo >= 0 ? '✅ Base crescendo' : '⚠️ Base encolhendo'}: saldo previsto de ${saldo >= 0 ? '+' : ''}${saldo} aluno(s).</strong>Para a base não encolher, a unidade precisa de pelo menos <b>${P.total}</b> matrículas novas no mês${P.mesCorrente ? ` — já foram ${P.novosLancados} (do painel).` : '.'} Cada renovação salva é uma matrícula a menos para buscar.</div>
     </div>
     <div class="grid">
-      ${kpi('Renovação do mês', pct(R.taxa) + '%', `${R.renovados} de ${R.total} · ${R.pendentes} a vencer · ${R.perdidos} perdidos`, corTaxa(R.taxa))}
+      ${kpi('Renovação — meta do mês', pct(R.taxaMes) + '%', `${R.renovadosNoMes} de ${R.total} renovaram dentro do mês · ${R.pendentes} a vencer · ${R.noPrazo} vencidos no prazo`, corTaxa(R.taxaMes))}
       ${kpi('Migraram para o anual', R.migrouAnual, `de ${R.renovados} renovações · ${R.antecipadas} antecipadas`, 'info')}
       ${kpi('Dias sem plano', R.diasSemPlanoMedio ? R.diasSemPlanoMedio + ' dias' : '0', `média de quem renovou depois de vencer (${R.renovaramDepoisDeVencer} aluno(s))`, R.diasSemPlanoMedio > 3 ? 'bad' : 'ok')}
       ${kpi('Cancelamentos', C.total, (cancPct != null ? pct(cancPct) + '% dos ativos · ' : '') + `${C.trocasDePlano} trocas de plano à parte · ano passado: ${r.cancAnoPassado}`, cancPct == null ? '' : cancPct <= 3 ? 'ok' : cancPct <= 4 ? 'warn' : 'bad')}
@@ -450,8 +450,8 @@ function gVisao() {
     <div class="card">
       <h2>📈 Últimos 6 meses</h2>
       <div class="sub">Base para a projeção. Meses com menos de 5 vencimentos não entram na média.</div>
-      <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Vencimentos</th><th>Renovados</th><th>Taxa</th><th>Migraram p/ anual</th><th>Cancelamentos</th></tr></thead><tbody>
-      ${r.historico.map(h => `<tr><td>${esc(rotulo(h.mes))}</td><td>${h.venc}</td><td>${h.renov}</td><td class="${h.venc ? corTaxa(h.taxa) : ''}"><b>${h.venc ? pct(h.taxa) + '%' : '—'}</b></td><td>${h.migrouAnual}</td><td>${h.canc}</td></tr>`).join('')}
+      <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Vencimentos</th><th>Renovou no mês</th><th>Meta do mês</th><th>Renovou em 30 dias</th><th>Viraram rematrícula</th><th>Migraram p/ anual</th><th>Cancelamentos</th></tr></thead><tbody>
+      ${r.historico.map(h => `<tr><td>${esc(rotulo(h.mes))}</td><td>${h.venc}</td><td>${h.renovNoMes}</td><td class="${h.venc ? corTaxa(h.taxaMes) : ''}"><b>${h.venc ? pct(h.taxaMes) + '%' : '—'}</b></td><td class="${h.venc ? corTaxa(h.taxa) : ''}">${h.venc ? pct(h.taxa) + '%' : '—'}</td><td>${h.rematriculas || 0}</td><td>${h.migrouAnual}</td><td>${h.canc}</td></tr>`).join('')}
       </tbody></table></div>
     </div>`;
 }
@@ -494,6 +494,8 @@ const pessoa = x => `<div class="nm">${esc(x.nome)}</div><div class="sm">ID ${es
 function gRenov() {
   const R = G.renovacao;
   let lista = R.lista;
+  if (gFiltro.renov === 'agora') lista = lista.filter(x => x.situacao === 'no_prazo' || x.situacao === 'pendente');
+  if (gFiltro.renov === 'no_prazo') lista = lista.filter(x => x.situacao === 'no_prazo');
   if (gFiltro.renov === 'rota') lista = G.rotaAntecipada || [];
   if (gFiltro.renov === 'reaquecer') lista = R.lista.concat(G.rotaAntecipada || []).filter(x => x.situacao === 'pendente' && x.reaquecer);
   if (gFiltro.renov === 'pendente') lista = lista.filter(x => x.situacao === 'pendente');
@@ -501,24 +503,26 @@ function gRenov() {
   if (gFiltro.renov === 'sem') lista = lista.filter(semContato);
   return `
     <div class="grid">
-      ${kpi('Vencimentos do mês', R.total, 'planos com fim no mês (sem recorrência automática)')}
-      ${kpi('Renovados', R.renovados, pct(R.taxa) + '% · meta 70% / super 85%', corTaxa(R.taxa))}
-      ${kpi('A vencer', R.pendentes, 'ainda dá para renovar', 'warn')}
-      ${kpi('Venceram sem renovar', R.perdidos, 'resgate / reativação', R.perdidos ? 'bad' : 'ok')}
+      ${kpi('Vencimentos do mês', R.total, 'planos com fim no mês · DCC/recorrente fica fora (renova sozinho)')}
+      ${kpi('Meta do mês', pct(R.taxaMes) + '%', `${R.renovadosNoMes} renovaram dentro do mês · meta 70% / super 85%`, corTaxa(R.taxaMes))}
+      ${kpi('Renovação em até 30 dias', pct(R.taxa) + '%', `${R.renovados} renovados · ${R.antecipadas} antes de vencer · ${R.renovaramDepoisDeVencer} depois`, corTaxa(R.taxa))}
+      ${kpi('A vencer', R.pendentes, 'ainda dá para renovar antes', 'warn')}
+      ${kpi('Venceram, ainda no prazo', R.noPrazo, 'até 30 dias: ainda é renovação — urgente', R.noPrazo ? 'bad' : 'ok')}
+      ${kpi('Passaram dos 30 dias', R.perdidos, `${R.rematriculas} voltaram como rematrícula`, R.perdidos ? 'bad' : 'ok')}
     </div>
     <div class="grid-2">
       <div class="card"><h2>📦 Renovação por tipo de plano</h2><div class="sub">Onde a renovação está mais fraca.</div>
-        <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Vencem</th><th>Renovados</th><th>A vencer</th><th>Perdidos</th><th>Taxa</th><th>Dias sem plano*</th></tr></thead><tbody>
-        ${R.porTipo.map(t => `<tr><td><b>${esc(t.tipo)}</b></td><td>${t.total}</td><td>${t.renovados}</td><td>${t.pendentes}</td><td>${t.perdidos}</td><td class="${corTaxa(t.taxa)}"><b>${pct(t.taxa)}%</b></td><td class="${t.diasSemPlano > 3 ? 'bad' : ''}">${t.diasSemPlano || '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Sem vencimentos no mês.</td></tr>'}
-        </tbody></table></div><div class="sm" style="margin-top:6px">* média de dias entre o vencimento e o novo plano, para quem renovou atrasado. Cada dia é mensalidade perdida.</div></div>
+        <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Vencem</th><th>Meta do mês</th><th>Em 30 dias</th><th>A vencer</th><th>Vencidos no prazo</th><th>Passaram de 30</th><th>Dias sem plano*</th></tr></thead><tbody>
+        ${R.porTipo.map(t => `<tr><td><b>${esc(t.tipo)}</b></td><td>${t.total}</td><td class="${corTaxa(t.taxaMes)}"><b>${pct(t.taxaMes)}%</b></td><td class="${corTaxa(t.taxa)}">${pct(t.taxa)}%</td><td>${t.pendentes}</td><td class="${t.noPrazo ? 'bad' : ''}">${t.noPrazo}</td><td>${t.perdidos}</td><td class="${t.diasSemPlano > 3 ? 'bad' : ''}">${t.diasSemPlano || '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">Sem vencimentos no mês.</td></tr>'}
+        </tbody></table></div><div class="sm" style="margin-top:6px">* média de dias entre o vencimento e a nova venda, para quem renovou depois de vencer (até 30 dias). Cada dia é mensalidade perdida. Regra do Evo: depois de 30 dias é rematrícula.</div></div>
       <div class="card"><h2>⬆️ Plano anterior → plano novo</h2><div class="sub">Quem renovou, renovou para quê. O objetivo é migrar para o anual.</div>
         ${R.migracao.length ? R.migracao.map(m => `<div class="row"><span class="lbl">${esc(m.de_para)}</span><span class="val ${/→ Anual$/.test(m.de_para) && !/^Anual/.test(m.de_para) ? 'ok' : ''}">${m.qtd}</span></div>`).join('') : '<div class="empty">Nenhuma renovação ainda.</div>'}
       </div>
     </div>
     <div class="card"><h2>📋 Lista de trabalho — renovação</h2>${acomp(R.acompanhamento)}
-      ${filtroBtns('renov', [['pendente', 'A vencer no mês'], ['rota', `Anuais nos próximos ${G.diasRotaAnual} dias (${(G.rotaAntecipada || []).length})`], ['reaquecer', '🔥 Reaquecer antes'], ['nao_renovado', 'Venceram sem renovar'], ['sem', 'Sem resposta da líder'], ['todos', 'Todos']])}
+      ${filtroBtns('renov', [['agora', `Trabalhar agora (${R.noPrazo + R.pendentes})`], ['no_prazo', `⏳ Venceram, ainda no prazo (${R.noPrazo})`], ['pendente', 'A vencer'], ['rota', `Anuais nos próximos ${G.diasRotaAnual} dias (${(G.rotaAntecipada || []).length})`], ['reaquecer', '🔥 Reaquecer antes'], ['nao_renovado', 'Passaram dos 30 dias'], ['sem', 'Sem resposta da líder'], ['todos', 'Todos']])}
       <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Vence</th><th>Situação</th><th>Resposta da líder</th></tr></thead><tbody>
-      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.fim))}<div class="sm">${x.diasParaVencer >= 0 ? 'em ' + x.diasParaVencer + ' dia(s)' : 'há ' + (-x.diasParaVencer) + ' dia(s)'}</div></td><td><span class="chip ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada nesta lista. 🎉</td></tr>'}
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.fim))}<div class="sm ${x.situacao === 'no_prazo' ? 'bad' : ''}">${x.situacao === 'no_prazo' ? 'venceu há ' + (-x.diasParaVencer) + ' dia(s) · faltam <b>' + x.diasParaRematricula + '</b> para virar rematrícula' : x.diasParaVencer >= 0 ? 'em ' + x.diasParaVencer + ' dia(s)' : 'há ' + (-x.diasParaVencer) + ' dia(s)'}</div></td><td><span class="chip ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada nesta lista. 🎉</td></tr>'}
       </tbody></table></div></div>`;
 }
 
@@ -560,18 +564,18 @@ function gCanc() {
     </div>
     <div class="grid-2">
       <div class="card"><h2>❓ Por que estão saindo</h2><div class="sub">Motivo registrado no Evo.</div>${hbars(C.motivos, 'motivo')}</div>
-      <div class="card"><h2>⏱️ Quanto tempo ficaram</h2><div class="sub">Saída cedo = problema de pós-venda e adaptação.</div>${hbars(C.permanencia, 'faixa')}
+      <div class="card"><h2>⏱️ Quanto tempo ficaram</h2><div class="sub">Tempo contínuo de casa até cancelar (soma as renovações e cobranças do DCC em sequência). Saída cedo = problema de pós-venda e adaptação.</div>${hbars(C.permanencia, 'faixa')}
         <div class="section-title">Por tipo de plano</div>${hbars(C.porTipo, 'tipo')}</div>
     </div>
     <div class="card"><h2>📋 Lista de trabalho — reversão</h2>${acomp(C.acompanhamento)}
       ${filtroBtns('canc', [['todos', 'Todos'], ['sem', 'Sem resposta da líder'], ['semmot', 'Sem motivo no Evo']])}
       <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Cancelou</th><th>Motivo (Evo)</th><th>Tentativa de reversão (líder)</th></tr></thead><tbody>
-      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.data))}<div class="sm">após ${String(x.meses).replace('.', ',')} mês(es)</div></td><td>${x.motivo === 'Sem motivo registrado' ? '<span class="chip red">sem motivo</span>' : esc(x.motivo)}</td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum cancelamento no mês. 🎉</td></tr>'}
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.data))}<div class="sm">após ${String(x.meses).replace('.', ',')} mês(es)${x.desde ? ' · contínuo desde ' + esc(dataBR(x.desde)) : ''}</div></td><td>${x.motivo === 'Sem motivo registrado' ? '<span class="chip red">sem motivo</span>' : esc(x.motivo)}</td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum cancelamento no mês. 🎉</td></tr>'}
       </tbody></table></div></div>`;
 }
 function gAgenda() {
   const A = G.agenda || {};
-  if (!A.disponivel) return '<div class="card"><div class="alert amber">A agenda ainda não foi carregada do Evo. Ela entra na próxima atualização.</div></div>';
+  if (!A.disponivel) return '<div class="card"><h2>📅 Agenda</h2><div class="alert amber">O Evo ainda não libera pela API a lista de aulas experimentais e visitas (relatório Gerencial → Aulas Experimentais). Aguardando a resposta do Evo para definir o caminho.</div></div>';
   const cor = s => /Presente/.test(s) ? 'green' : /Ausente|Falta/.test(s) ? 'red' : /Confirmado/.test(s) ? 'blue' : /Desmarcado|Remarcado/.test(s) ? 'amber' : 'gray';
   const linha = x => `<tr><td><b>${esc(x.inicio)}</b><div class="sm">${esc(dataBR(x.data))}</div></td><td><div class="nm">${esc(x.pessoa || '—')}</div><div class="sm">${x.lead ? '🎯 lead (oportunidade)' : '🏋️ aluno'}</div></td><td>${esc(x.atividade)}</td><td><span class="chip ${cor(x.situacao)}">${esc(x.situacao)}</span></td></tr>`;
   const prox = Object.keys(A.semana || {}).sort().slice(0, 7);
