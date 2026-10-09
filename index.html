@@ -381,7 +381,8 @@ function desenharGestao() {
   if (!r.ultimaSync) { el.innerHTML = `<div class="card"><h2>🧭 Gestão 360</h2><div class="alert amber">Os dados do Evo ainda não foram carregados. Rode <b>instalarSincronizacao</b> no Apps Script (uma vez) ou clique abaixo.</div><button class="btn btn-dark" id="btnSync" onclick="sincronizarEvoAgora()">🔄 Buscar dados do Evo agora</button></div>`; return; }
   const R = r.renovacao, C = r.cancelamento, I = r.inadimplencia;
   const nUrg = I.cancelam7dias + R.lista.filter(x => x.situacao === 'pendente' && x.diasParaVencer <= 7 && !x.acao).length;
-  const segs = [['visao', '🧭 Visão do mês', nUrg], ['renov', '🔄 Renovação', R.pendentes + R.perdidos], ['inad', '💳 Inadimplência', I.alunos], ['canc', '🚪 Cancelamentos', C.total]];
+  const A = r.agenda || {};
+  const segs = [['visao', '🧭 Visão do mês', nUrg], ['agenda', '📅 Agenda', (A.semRemarcar || []).length], ['renov', '🔄 Renovação', R.pendentes + R.perdidos], ['mensal', '⬆️ Mensalistas', (r.mensalistas || {}).tresMais || 0], ['inad', '💳 Inadimplência', I.alunos], ['canc', '🚪 Cancelamentos', C.total], ['equipe', '👥 Equipe', 0]];
   el.innerHTML = `
     <div class="bar" style="margin-bottom:12px">
       <span class="status">📡 Evo atualizado em <b>${esc(r.ultimaSync.em)}</b>${r.ultimaSync.andamento ? ` · <span class="chip blue">⏳ atualizando: etapa ${r.ultimaSync.andamento.feitas} de ${r.ultimaSync.andamento.total}</span>` : ''}${r.ultimaSync.erro ? ' · <span class="bad">erro: ' + esc(r.ultimaSync.erro) + '</span>' : ''}</span>
@@ -390,7 +391,7 @@ function desenharGestao() {
     </div>
     <div class="seg">${segs.map(s => `<button class="${gTab === s[0] ? 'on' : ''}" onclick="gTab='${s[0]}';desenharGestao()">${s[1]}${s[2] ? `<span class="n">${s[2]}</span>` : ''}</button>`).join('')}</div>
     <div id="gBody"></div>`;
-  $('gBody').innerHTML = gTab === 'visao' ? gVisao() : gTab === 'renov' ? gRenov() : gTab === 'inad' ? gInad() : gCanc();
+  $('gBody').innerHTML = gTab === 'visao' ? gVisao() : gTab === 'agenda' ? gAgenda() : gTab === 'renov' ? gRenov() : gTab === 'mensal' ? gMensal() : gTab === 'inad' ? gInad() : gTab === 'equipe' ? gEquipe() : gCanc();
 }
 
 const corTaxa = t => t >= 85 ? 'ok' : t >= 70 ? 'warn' : 'bad';
@@ -413,6 +414,13 @@ function gVisao() {
   if (C.semMotivo) todo.push(['amber', '❓', `<b>${C.semMotivo} cancelamento(s) sem motivo registrado no Evo.</b> Sem motivo não há diagnóstico.`, 'canc']);
   const cSem = C.lista.filter(x => !x.acao).length;
   if (cSem) todo.push(['amber', '🛟', `<b>${cSem} cancelamento(s) sem tentativa de reversão registrada.</b>`, 'canc']);
+  const Ag = r.agenda || {};
+  if ((Ag.semRemarcar || []).length) todo.unshift(['red', '📅', `<b>${Ag.semRemarcar.length} agendamento(s) dos últimos 7 dias faltaram e não foram remarcados.</b> É venda que está escapando.`, 'agenda']);
+  if ((Ag.hoje || []).length) todo.unshift(['amber', '☕', `<b>${Ag.hoje.length} agendamento(s) hoje.</b> Bloco 1 da consultora: confirmar e preparar a recepção.`, 'agenda']);
+  const rq = R.lista.concat(r.rotaAntecipada || []).filter(x => x.situacao === 'pendente' && x.reaquecer).length;
+  if (rq) todo.push(['amber', '🔥', `<b>${rq} aluno(s) a renovar estão há ${r.diasSemTreinarAlerta}+ dias sem treinar.</b> Primeiro reaquecer a frequência, depois falar de renovação.`, 'renov']);
+  if ((r.rotaAntecipada || []).length) todo.push(['amber', '📆', `<b>${r.rotaAntecipada.length} plano(s) anual/semestral vencem nos próximos ${r.diasRotaAnual} dias</b> — o CRM só avisa com 20. Já dá para propor a renovação.`, 'renov']);
+  if ((r.mensalistas || {}).tresMais) todo.push(['amber', '⬆️', `<b>${r.mensalistas.tresMais} mensalista(s) há 3+ meses seguidos.</b> Mostrar quanto já teriam economizado no anual.`, 'mensal']);
   if (!todo.length) todo.push(['', '✅', 'Nenhuma pendência crítica agora.', 'visao']);
   return `
     <div class="card" style="border-top:4px solid var(--brand)">
@@ -430,6 +438,7 @@ function gVisao() {
     <div class="grid">
       ${kpi('Renovação do mês', pct(R.taxa) + '%', `${R.renovados} de ${R.total} · ${R.pendentes} a vencer · ${R.perdidos} perdidos`, corTaxa(R.taxa))}
       ${kpi('Migraram para o anual', R.migrouAnual, `de ${R.renovados} renovações · ${R.antecipadas} antecipadas`, 'info')}
+      ${kpi('Dias sem plano', R.diasSemPlanoMedio ? R.diasSemPlanoMedio + ' dias' : '0', `média de quem renovou depois de vencer (${R.renovaramDepoisDeVencer} aluno(s))`, R.diasSemPlanoMedio > 3 ? 'bad' : 'ok')}
       ${kpi('Cancelamentos', C.total, (cancPct != null ? pct(cancPct) + '% dos ativos · ' : '') + `${C.trocasDePlano} trocas de plano à parte · ano passado: ${r.cancAnoPassado}`, cancPct == null ? '' : cancPct <= 3 ? 'ok' : cancPct <= 4 ? 'warn' : 'bad')}
       ${kpi('Inadimplentes agora', I.alunos, `${brl(I.valorAberto)} em aberto · ${I.criticos} críticos (31+ dias)`, I.criticos ? 'bad' : 'warn')}
       ${kpi('Recuperado no mês', brl(I.recuperadoMes), `${I.recuperadosQtd} cobrança(s) recuperada(s)`, 'ok')}
@@ -449,11 +458,9 @@ function gVisao() {
 
 function acaoCell(it) {
   const a = it.acao || {}, id = it.chave.replace(':', '_');
-  const nomes = (cfg && cfg.consultoras || []).map(c => c.nome);
   return `<div class="act" id="act_${id}">
     <select data-f="status">${G.status.map(s => `<option ${s === (a.status || 'A contatar') ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
     <select data-f="motivo"><option value="">motivo…</option>${G.motivos.map(m => `<option ${m === a.motivo ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
-    <select data-f="responsavel"><option value="">quem…</option>${nomes.map(n => `<option ${n === a.responsavel ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
     <input data-f="obs" placeholder="observação" value="${esc(a.obs || '')}">
     <button class="sv" onclick="salvarAcao('${it.chave}')">Salvar</button>
   </div>${a.em ? `<div class="sm">${a.tentativas} registro(s) · último ${esc(a.em)}</div>` : ''}`;
@@ -462,8 +469,8 @@ function acaoCell(it) {
 async function salvarAcao(chave) {
   const box = $('act_' + chave.replace(':', '_')); if (!box) return;
   const d = { chave }; box.querySelectorAll('[data-f]').forEach(x => d[x.dataset.f] = x.value);
-  const lista = [...G.renovacao.lista, ...G.inadimplencia.lista, ...G.cancelamento.lista];
-  const it = lista.find(x => x.chave === chave); if (it) { d.idMember = it.idMember; d.nome = it.nome; }
+  const lista = [...G.renovacao.lista, ...(G.rotaAntecipada || []), ...((G.mensalistas || {}).lista || []), ...G.inadimplencia.lista, ...G.cancelamento.lista];
+  const it = lista.find(x => x.chave === chave); if (it) { d.idMember = it.idMember; d.nome = it.nome; d.responsavel = it.consultora || ''; }
   const b = box.querySelector('.sv'); b.disabled = true; b.textContent = '…';
   try {
     const r = await apiPost({ action: 'acao', mes: currentMonth, senha: senhaLider, dados: d });
@@ -482,10 +489,13 @@ function resumoLocal(lista) {
 }
 const filtroBtns = (k, ops) => `<div class="filt">${ops.map(o => `<button class="${gFiltro[k] === o[0] ? 'on' : ''}" onclick="gFiltro.${k}='${o[0]}';desenharGestao()">${o[1]}</button>`).join('')}</div>`;
 const semContato = x => !x.acao || x.acao.status === 'A contatar';
+const pessoa = x => `<div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)} · 👤 ${esc(x.consultora || 'Sem vínculo')}</div>${x.diasSemTreinar != null ? `<div class="sm ${x.reaquecer ? 'bad' : ''}">${x.reaquecer ? '🔥 ' : ''}${x.diasSemTreinar === 0 ? 'treinou hoje' : 'sem treinar há ' + x.diasSemTreinar + ' dia(s)'}</div>` : ''}`;
 
 function gRenov() {
   const R = G.renovacao;
   let lista = R.lista;
+  if (gFiltro.renov === 'rota') lista = G.rotaAntecipada || [];
+  if (gFiltro.renov === 'reaquecer') lista = R.lista.concat(G.rotaAntecipada || []).filter(x => x.situacao === 'pendente' && x.reaquecer);
   if (gFiltro.renov === 'pendente') lista = lista.filter(x => x.situacao === 'pendente');
   if (gFiltro.renov === 'nao_renovado') lista = lista.filter(x => x.situacao === 'nao_renovado');
   if (gFiltro.renov === 'sem') lista = lista.filter(semContato);
@@ -498,17 +508,17 @@ function gRenov() {
     </div>
     <div class="grid-2">
       <div class="card"><h2>📦 Renovação por tipo de plano</h2><div class="sub">Onde a renovação está mais fraca.</div>
-        <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Vencem</th><th>Renovados</th><th>A vencer</th><th>Perdidos</th><th>Taxa</th></tr></thead><tbody>
-        ${R.porTipo.map(t => `<tr><td><b>${esc(t.tipo)}</b></td><td>${t.total}</td><td>${t.renovados}</td><td>${t.pendentes}</td><td>${t.perdidos}</td><td class="${corTaxa(t.taxa)}"><b>${pct(t.taxa)}%</b></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Sem vencimentos no mês.</td></tr>'}
-        </tbody></table></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Vencem</th><th>Renovados</th><th>A vencer</th><th>Perdidos</th><th>Taxa</th><th>Dias sem plano*</th></tr></thead><tbody>
+        ${R.porTipo.map(t => `<tr><td><b>${esc(t.tipo)}</b></td><td>${t.total}</td><td>${t.renovados}</td><td>${t.pendentes}</td><td>${t.perdidos}</td><td class="${corTaxa(t.taxa)}"><b>${pct(t.taxa)}%</b></td><td class="${t.diasSemPlano > 3 ? 'bad' : ''}">${t.diasSemPlano || '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Sem vencimentos no mês.</td></tr>'}
+        </tbody></table></div><div class="sm" style="margin-top:6px">* média de dias entre o vencimento e o novo plano, para quem renovou atrasado. Cada dia é mensalidade perdida.</div></div>
       <div class="card"><h2>⬆️ Plano anterior → plano novo</h2><div class="sub">Quem renovou, renovou para quê. O objetivo é migrar para o anual.</div>
         ${R.migracao.length ? R.migracao.map(m => `<div class="row"><span class="lbl">${esc(m.de_para)}</span><span class="val ${/→ Anual$/.test(m.de_para) && !/^Anual/.test(m.de_para) ? 'ok' : ''}">${m.qtd}</span></div>`).join('') : '<div class="empty">Nenhuma renovação ainda.</div>'}
       </div>
     </div>
     <div class="card"><h2>📋 Lista de trabalho — renovação</h2>${acomp(R.acompanhamento)}
-      ${filtroBtns('renov', [['pendente', 'A vencer'], ['nao_renovado', 'Venceram sem renovar'], ['sem', 'Sem contato'], ['todos', 'Todos']])}
-      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Vence</th><th>Situação</th><th>Contato da equipe</th></tr></thead><tbody>
-      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.fim))}<div class="sm">${x.diasParaVencer >= 0 ? 'em ' + x.diasParaVencer + ' dia(s)' : 'há ' + (-x.diasParaVencer) + ' dia(s)'}</div></td><td><span class="chip ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada nesta lista. 🎉</td></tr>'}
+      ${filtroBtns('renov', [['pendente', 'A vencer no mês'], ['rota', `Anuais nos próximos ${G.diasRotaAnual} dias (${(G.rotaAntecipada || []).length})`], ['reaquecer', '🔥 Reaquecer antes'], ['nao_renovado', 'Venceram sem renovar'], ['sem', 'Sem resposta da líder'], ['todos', 'Todos']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Vence</th><th>Situação</th><th>Resposta da líder</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.fim))}<div class="sm">${x.diasParaVencer >= 0 ? 'em ' + x.diasParaVencer + ' dia(s)' : 'há ' + (-x.diasParaVencer) + ' dia(s)'}</div></td><td><span class="chip ${SIT[x.situacao][1]}">${SIT[x.situacao][0]}</span></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nada nesta lista. 🎉</td></tr>'}
       </tbody></table></div></div>`;
 }
 
@@ -529,9 +539,9 @@ function gInad() {
       ${I.faixas.map(f => `<div class="hb"><span>${esc(f.faixa)}</span><div class="tr"><div style="width:${f.qtd / maxQ * 100}%;background:${/crít|40/.test(f.faixa) ? 'var(--red)' : 'var(--amber)'}"></div></div><span class="q">${f.qtd}</span></div>`).join('')}
     </div>
     <div class="card"><h2>📋 Lista de trabalho — recuperação</h2>${acomp(I.acompanhamento)}
-      ${filtroBtns('inad', [['todos', 'Todos'], ['urg', 'Cancelam em até 10 dias'], ['sem', 'Sem contato']])}
-      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Em aberto</th><th>Atraso</th><th>Cobrança</th><th>Contato da equipe</th></tr></thead><tbody>
-      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td><b>${brl(x.valor)}</b><div class="sm">${x.parcelas} parcela(s)</div></td><td><span class="chip ${x.diasParaCancelar <= 7 ? 'red' : x.diasParaCancelar <= 15 ? 'amber' : 'gray'}">${x.diasAtraso} dias</span><div class="sm">${x.diasParaCancelar > 0 ? 'cancela em ' + x.diasParaCancelar + ' dia(s)' : 'já passou dos ' + G.diasCancela + ' dias'}</div></td><td><div class="sm">${x.tentativas} tentativa(s) automáticas${x.recusa ? '<br>recusa: ' + esc(x.recusa) : ''}${x.forma ? '<br>' + esc(x.forma) : ''}</div></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum inadimplente. 🎉</td></tr>'}
+      ${filtroBtns('inad', [['todos', 'Todos'], ['urg', 'Cancelam em até 10 dias'], ['sem', 'Sem resposta da líder']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Em aberto</th><th>Atraso</th><th>Cobrança</th><th>Resposta da líder</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td><b>${brl(x.valor)}</b><div class="sm">${x.parcelas} parcela(s)</div></td><td><span class="chip ${x.diasParaCancelar <= 7 ? 'red' : x.diasParaCancelar <= 15 ? 'amber' : 'gray'}">${x.diasAtraso} dias</span><div class="sm">${x.diasParaCancelar > 0 ? 'cancela em ' + x.diasParaCancelar + ' dia(s)' : 'já passou dos ' + G.diasCancela + ' dias'}</div></td><td><div class="sm">${x.tentativas} tentativa(s) automáticas${x.recusa ? '<br>recusa: ' + esc(x.recusa) : ''}${x.forma ? '<br>' + esc(x.forma) : ''}</div></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum inadimplente. 🎉</td></tr>'}
       </tbody></table></div></div>`;
 }
 
@@ -554,11 +564,59 @@ function gCanc() {
         <div class="section-title">Por tipo de plano</div>${hbars(C.porTipo, 'tipo')}</div>
     </div>
     <div class="card"><h2>📋 Lista de trabalho — reversão</h2>${acomp(C.acompanhamento)}
-      ${filtroBtns('canc', [['todos', 'Todos'], ['sem', 'Sem tentativa de reversão'], ['semmot', 'Sem motivo no Evo']])}
-      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Cancelou</th><th>Motivo (Evo)</th><th>Tentativa de reversão</th></tr></thead><tbody>
-      ${lista.map(x => `<tr><td><div class="nm">${esc(x.nome)}</div><div class="sm">ID ${esc(x.idMember)}</div></td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.data))}<div class="sm">após ${String(x.meses).replace('.', ',')} mês(es)</div></td><td>${x.motivo === 'Sem motivo registrado' ? '<span class="chip red">sem motivo</span>' : esc(x.motivo)}</td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum cancelamento no mês. 🎉</td></tr>'}
+      ${filtroBtns('canc', [['todos', 'Todos'], ['sem', 'Sem resposta da líder'], ['semmot', 'Sem motivo no Evo']])}
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Plano</th><th>Cancelou</th><th>Motivo (Evo)</th><th>Tentativa de reversão (líder)</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td>${esc(x.plano)}<div class="sm">${esc(x.tipo)}</div></td><td>${esc(dataBR(x.data))}<div class="sm">após ${String(x.meses).replace('.', ',')} mês(es)</div></td><td>${x.motivo === 'Sem motivo registrado' ? '<span class="chip red">sem motivo</span>' : esc(x.motivo)}</td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum cancelamento no mês. 🎉</td></tr>'}
       </tbody></table></div></div>`;
 }
+function gAgenda() {
+  const A = G.agenda || {};
+  if (!A.disponivel) return '<div class="card"><div class="alert amber">A agenda ainda não foi carregada do Evo. Ela entra na próxima atualização.</div></div>';
+  const cor = s => /Presente/.test(s) ? 'green' : /Ausente|Falta/.test(s) ? 'red' : /Confirmado/.test(s) ? 'blue' : /Desmarcado|Remarcado/.test(s) ? 'amber' : 'gray';
+  const linha = x => `<tr><td><b>${esc(x.inicio)}</b><div class="sm">${esc(dataBR(x.data))}</div></td><td><div class="nm">${esc(x.pessoa || '—')}</div><div class="sm">${x.lead ? '🎯 lead (oportunidade)' : '🏋️ aluno'}</div></td><td>${esc(x.atividade)}</td><td><span class="chip ${cor(x.situacao)}">${esc(x.situacao)}</span></td></tr>`;
+  const prox = Object.keys(A.semana || {}).sort().slice(0, 7);
+  return `
+    <div class="grid">
+      ${kpi('Agendamentos hoje', (A.hoje || []).length, (A.hoje || []).filter(x => x.situacao === 'Confirmado').length + ' confirmados')}
+      ${kpi('Comparecimento (7 dias)', A.comparecimento7d == null ? '—' : pct(A.comparecimento7d) + '%', `${A.presentes7d || 0} vieram · ${A.ausentes7d || 0} faltaram · meta ≥ 60%`, A.comparecimento7d == null ? '' : A.comparecimento7d >= 60 ? 'ok' : 'bad')}
+      ${kpi('Faltaram e não remarcaram', (A.semRemarcar || []).length, 'últimos 7 dias — venda escapando', (A.semRemarcar || []).length ? 'bad' : 'ok')}
+    </div>
+    <div class="card"><h2>☕ Agenda de hoje</h2><div class="sub">Bloco 1 da consultora: abrir o dia por aqui. Lead não é de ninguém — é de quem estiver no horário.</div>
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Hora</th><th>Pessoa</th><th>Atividade</th><th>Situação no Evo</th></tr></thead><tbody>${(A.hoje || []).map(linha).join('') || '<tr><td colspan="4" class="empty">Nenhum agendamento hoje.</td></tr>'}</tbody></table></div></div>
+    <div class="card"><h2>📵 Faltaram e não foram remarcados</h2><div class="sub">Mensagem logo após o horário perdido e nova data. Se aparece aqui, ninguém remarcou no Evo.</div>
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Quando</th><th>Pessoa</th><th>Atividade</th><th>Situação</th></tr></thead><tbody>${(A.semRemarcar || []).map(linha).join('') || '<tr><td colspan="4" class="empty">Nenhuma falta sem remarcação. 🎉</td></tr>'}</tbody></table></div></div>
+    <div class="card"><h2>🗓️ Próximos dias</h2>${prox.map(d => `<div class="row"><span class="lbl">${esc(dataBR(d))}</span><span class="val">${A.semana[d]} agendamento(s)</span></div>`).join('') || '<div class="empty">Nada agendado.</div>'}</div>`;
+}
+
+function gMensal() {
+  const M = G.mensalistas || { lista: [] };
+  const lista = M.lista;
+  const soma = lista.reduce((s, x) => s + x.economiaAno, 0);
+  return `
+    <div class="grid">
+      ${kpi('Mensalistas ativos', M.total, 'o maior gargalo: mais trabalho, menos permanência')}
+      ${kpi('Há 3+ meses no mensal', M.tresMais, 'prontos para a proposta de migração', M.tresMais ? 'warn' : 'ok')}
+      ${kpi('Economia anual em jogo', brl(soma), 'o que esses alunos economizariam no anual (R$ ' + G.precoAnualMes + '/mês)', 'info')}
+    </div>
+    <div class="tip"><strong>Como usar</strong>Ordem: plano anual → assinatura (recorrente) → mensal. Esta fila mostra o argumento pronto: "você está há X meses no mensal e já teria economizado R$ Y". Proposta no contato de renovação (20 dias antes).</div>
+    <div class="card"><h2>⬆️ Fila de migração do mensalista</h2><div class="sub">Ordenada por mais tempo seguido no mensal.</div>
+      <div class="table-wrap"><table class="lst"><thead><tr><th>Aluno</th><th>Meses seguidos</th><th>Já teria economizado</th><th>Vence</th><th>Resposta da líder</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${pessoa(x)}</td><td><span class="chip ${x.meses >= 3 ? 'amber' : 'gray'}">${x.meses} mês(es)</span><div class="sm">paga ${brl(x.valor)}/mês</div></td><td><b class="ok">${brl(x.jaTeriaEconomizado)}</b><div class="sm">${brl(x.economiaAno)} por ano no anual</div></td><td>${esc(dataBR(x.fim))}<div class="sm">em ${x.diasParaVencer} dia(s)</div></td><td>${acaoCell(x)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum mensalista ativo.</td></tr>'}
+      </tbody></table></div></div>`;
+}
+
+function gEquipe() {
+  const E = G.equipe || [];
+  if (!G.temAlunos) return '<div class="card"><div class="alert amber">A carteira de cada consultora ainda não foi carregada do Evo. Ela entra na próxima atualização.</div></div>';
+  return `
+    <div class="tip"><strong>Como ler</strong>A carteira vem do vínculo do aluno com a consultora no Evo. "Em jogo" soma o valor dos planos a renovar e das dívidas em aberto da carteira — é o dinheiro que depende do trabalho ativo dela. "Resgates" são renovações conquistadas depois do vencimento.</div>
+    <div class="card"><h2>👥 Carteira por consultora — ${esc(rotulo(G.mes))}</h2><div class="sub">Ordenado por dinheiro em jogo.</div>
+      <div class="table-wrap"><table><thead><tr><th>Consultora</th><th>Alunos ativos</th><th>Em jogo</th><th>Renovação</th><th>A vencer / perdidos</th><th>🔥 Sem treinar</th><th>Inadimplentes</th><th>Cancelamentos</th><th>Mensalistas</th><th>Migrou p/ anual</th><th>Resgates</th></tr></thead><tbody>
+      ${E.map(e => `<tr><td><b>${esc(e.consultora)}</b></td><td>${e.carteira}</td><td><b>${brl(e.emJogo)}</b></td><td class="${e.taxaRenov == null ? '' : corTaxa(e.taxaRenov)}"><b>${e.taxaRenov == null ? '—' : pct(e.taxaRenov) + '%'}</b><div class="sm">${e.renovados} de ${e.renovTotal}</div></td><td>${e.renovPendentes} / <span class="${e.renovPerdidos ? 'bad' : ''}">${e.renovPerdidos}</span></td><td class="${e.semTreinar ? 'warn' : ''}">${e.semTreinar}</td><td>${e.inadimplentes}<div class="sm">${brl(e.valorInad)}</div></td><td>${e.cancelamentos}</td><td>${e.mensalistas}</td><td class="ok">${e.migrouAnual}</td><td class="ok">${e.resgates}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="alert blue">As tarefas atrasadas do CRM do Evo ainda não aparecem aqui: a API pública do Evo não entrega essas tarefas. Estamos verificando com o suporte do Evo.</div>`;
+}
+
 const dataBR = s => { const p = String(s || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : ''; };
 
 // ==================== CARREGAMENTO ====================
